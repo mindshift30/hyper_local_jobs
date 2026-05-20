@@ -16,13 +16,27 @@ interface Props {
 export default function SeekerHome({ navigate }: Props) {
   const { t } = useI18n();
   const { user } = useAuthStore();
-  const { filters, setSearch } = useJobsStore();
+  const { jobs, fetchJobs, loading } = useJobsStore();
   const [searchFocused, setSearchFocused] = useState(false);
 
-  const urgentJobs = DEMO_JOBS.filter(j => j.isUrgent);
-  const nearbyJobs = [...DEMO_JOBS].sort((a, b) => a.distance - b.distance).slice(0, 6);
-  const bestPayJobs = [...DEMO_JOBS].sort((a, b) => b.pay - a.pay).slice(0, 4);
-  const recommended = [...DEMO_JOBS].sort((a, b) => getMatchScore(b) - getMatchScore(a)).slice(0, 4);
+  React.useEffect(() => {
+    fetchJobs();
+  }, [fetchJobs]);
+
+  if (loading && jobs.length === 0) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '80vh', gap: 'var(--space-4)' }}>
+        <span className="btn-spinner" style={{ width: 40, height: 40, borderWidth: 3, borderColor: 'rgba(37,99,235,0.15)', borderTopColor: 'var(--primary)' }} />
+        <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)', fontWeight: 600 }}>Finding gigs near you...</p>
+      </div>
+    );
+  }
+
+  const urgentJobs = jobs.filter(j => j.isUrgent);
+  const nearbyJobs = [...jobs].sort((a, b) => a.distance - b.distance).slice(0, 6);
+  const bestPayJobs = [...jobs].sort((a, b) => b.pay - a.pay).slice(0, 4);
+  const recommended = [...jobs].sort((a, b) => getMatchScore(b) - getMatchScore(a)).slice(0, 4);
+
 
   return (
     <div className="page-enter" style={{ paddingBottom: 'calc(var(--bottom-nav-height) + var(--space-4))' }}>

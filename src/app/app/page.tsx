@@ -13,7 +13,16 @@ import EmployerShell from '@/components/screens/EmployerShell';
 import AdminDashboard from '@/components/screens/AdminDashboard';
 import ChatListScreen from '@/components/screens/ChatListScreen';
 import ChatDetailScreen from '@/components/screens/ChatDetailScreen';
-import MapViewScreen from '@/components/screens/MapViewScreen';
+import dynamic from 'next/dynamic';
+
+const MapViewScreen = dynamic(() => import('@/components/screens/MapViewScreen'), {
+  ssr: false,
+  loading: () => (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-primary)' }}>
+      <span className="btn-spinner" style={{ width: 40, height: 40, borderTopColor: 'var(--primary)' }} />
+    </div>
+  )
+});
 
 export type Screen =
   | 'onboarding'
@@ -46,6 +55,10 @@ export default function AppPage() {
   const [screen, setScreen] = useState<Screen>('onboarding');
   const [selectedJobId, setSelectedJobId] = useState<string>('j1');
   const { isAuthenticated, user } = useAuthStore();
+
+  useEffect(() => {
+    useAuthStore.getState().checkSession();
+  }, []);
 
   const navigate = (s: Screen, jobId?: string) => {
     if (jobId) setSelectedJobId(jobId);

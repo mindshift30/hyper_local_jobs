@@ -118,7 +118,7 @@ function PostJobWizard({ navigate }: { navigate: (s: Screen) => void }) {
   const { showToast } = useUIStore();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({
-    title: '', category: '', people: 1, pay: '', payType: 'daily' as const,
+    title: '', category: '', people: 1, pay: '', payType: 'daily' as 'daily' | 'weekly' | 'monthly',
     shift: 'morning', duration: '1 day', area: 'T.Nagar', description: '', sameDayPay: true,
     latitude: 13.0418, longitude: 80.2341, // Default T.Nagar coords
   });

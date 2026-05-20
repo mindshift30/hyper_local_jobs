@@ -5,7 +5,16 @@ import { useI18n } from '@/components/providers/I18nProvider';
 import { DEMO_JOBS, formatPay } from '@/lib/demo-data';
 import { ArrowLeft, Heart, MapPin, Clock, BadgeCheck, Star, Zap, Share2, MessageCircle, Users } from 'lucide-react';
 import { useJobsStore } from '@/stores/jobs-store';
-import JobLocationMap from '@/components/maps/JobLocationMap';
+import dynamic from 'next/dynamic';
+
+const JobLocationMap = dynamic(() => import('@/components/maps/JobLocationMap'), {
+  ssr: false,
+  loading: () => (
+    <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)' }}>
+      <span className="btn-spinner" style={{ width: 30, height: 30, borderTopColor: 'var(--primary)' }} />
+    </div>
+  )
+});
 import type { Screen } from '@/app/app/page';
 
 interface Props {

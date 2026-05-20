@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useI18n } from '@/components/providers/I18nProvider';
 import { useAuthStore } from '@/stores/auth-store';
+import { useJobsStore } from '@/stores/jobs-store';
+import { supabase, isSupabaseEnabled } from '@/services/supabase';
 import { DEMO_CHATS, DEMO_MESSAGES, ADMIN_USERS, DEMO_JOBS, ChatMessage } from '@/lib/demo-data';
 import { ArrowLeft, Send, Phone, Info, MoreVertical, Check, CheckCheck } from 'lucide-react';
 import type { Screen } from '@/app/app/page';
@@ -15,51 +17,204 @@ interface Props {
 export default function ChatDetailScreen({ chatId, navigate }: Props) {
   const { t } = useI18n();
   const { user } = useAuthStore();
+  const jobs = useJobsStore((state) => state.jobs);
+  
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
+  const [liveChat, setLiveChat] = useState<any>(null);
+  const [liveOtherUser, setLiveOtherUser] = useState<any>(null);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const chat = DEMO_CHATS.find(c => c.id === chatId);
-  const job = DEMO_JOBS.find(j => j.id === chat?.jobId);
-  const otherUser = ADMIN_USERS.find(u => u.id === (user?.role === 'seeker' ? chat?.employerId : chat?.seekerId));
+  // Time formatter helper
+  const formatTime = (isoString: string): string => {
+    try {
+      const date = new Date(isoString);
+      let hours = date.getHours();
+      const minutes = date.getMinutes().toString().padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      return `${hours}:${minutes} ${ampm}`;
+    } catch {
+      return 'Just now';
+    }
+  };
 
+  // 1. Resolve participant and job details (Live DB -> local mock)
+  const chat = liveChat || DEMO_CHATS.find(c => c.id === chatId);
+  const job = jobs.find(j => j.id === chat?.jobId) || DEMO_JOBS.find(j => j.id === chat?.jobId);
+  const otherUser = liveOtherUser 
+    ? { id: liveOtherUser.id, name: liveOtherUser.name, role: liveOtherUser.role }
+    : ADMIN_USERS.find(u => u.id === (user?.role === 'seeker' ? chat?.employerId : chat?.seekerId));
+
+  // 2. Fetch thread participants details dynamically if Supabase is active
   useEffect(() => {
-    // Load initial messages for this chat
-    const chatMessages = DEMO_MESSAGES.filter(m => m.chatId === chatId);
-    setMessages(chatMessages);
+    const client = supabase;
+    if (!isSupabaseEnabled() || !client || !user) return;
+
+    const loadChatParticipants = async () => {
+      try {
+        const { data: chatData } = await client
+          .from('chats')
+          .select('*')
+          .eq('id', chatId)
+          .single();
+
+        if (chatData) {
+          setLiveChat(chatData);
+          
+          const targetUserId = user.role === 'seeker' ? chatData.employer_id : chatData.seeker_id;
+          const { data: profileData } = await client
+            .from('profiles')
+            .select('*')
+            .eq('id', targetUserId)
+            .single();
+
+          if (profileData) {
+            setLiveOtherUser(profileData);
+          }
+        }
+      } catch (err) {
+        console.warn('[ChatDetail] Participant fetch warning:', err);
+      }
+    };
+
+    loadChatParticipants();
+  }, [chatId, user]);
+
+  // 3. Setup lightweight 5-second polling loop for messages
+  useEffect(() => {
+    const client = supabase;
+    if (!isSupabaseEnabled() || !client) {
+      // Mock messages initial load
+      const chatMessages = DEMO_MESSAGES.filter(m => m.chatId === chatId);
+      setMessages(chatMessages);
+      return;
+    }
+
+    const pollMessages = async () => {
+      try {
+        const { data, error } = await client
+          .from('messages')
+          .select('*')
+          .eq('chat_id', chatId)
+          .order('created_at', { ascending: true });
+
+        if (error) throw error;
+
+        if (data) {
+          const mapped: ChatMessage[] = data.map(m => ({
+            id: m.id,
+            chatId: m.chat_id,
+            senderId: m.sender_id,
+            text: m.text,
+            timestamp: formatTime(m.created_at),
+            isRead: m.is_read
+          }));
+
+          // Avoid resetting state if there are no new messages to prevent UI flicker
+          setMessages(prev => {
+            if (prev.length !== mapped.length || (prev.length > 0 && prev[prev.length - 1].id !== mapped[mapped.length - 1].id)) {
+              return mapped;
+            }
+            return prev;
+          });
+        }
+      } catch (err) {
+        console.warn('[ChatDetail] Polling failed:', err);
+      }
+    };
+
+    pollMessages();
+    const pollInterval = setInterval(pollMessages, 5000); // 5s active polling
+
+    return () => clearInterval(pollInterval);
   }, [chatId]);
 
+  // 4. Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = () => {
+  // 5. Send message action
+  const handleSend = async () => {
     if (!inputText.trim()) return;
 
-    const newMessage: ChatMessage = {
-      id: `m${Date.now()}`,
-      chatId,
-      senderId: user?.id || 'u1',
-      text: inputText,
-      timestamp: 'Just now',
-      isRead: false,
-    };
-
-    setMessages([...messages, newMessage]);
+    const textToSend = inputText;
     setInputText('');
 
-    // Simulate reply
-    setTimeout(() => {
-      const reply: ChatMessage = {
-        id: `m${Date.now() + 1}`,
+    const client = supabase;
+    if (!isSupabaseEnabled() || !client || !user) {
+      // Offline mock flow
+      const newMessage: ChatMessage = {
+        id: `m${Date.now()}`,
         chatId,
-        senderId: otherUser?.id || '',
-        text: "I'll get back to you shortly regarding the " + (job?.title || 'job') + ".",
+        senderId: user?.id || 'u1',
+        text: textToSend,
         timestamp: 'Just now',
         isRead: false,
       };
-      setMessages(prev => [...prev, reply]);
-    }, 2000);
+
+      setMessages(prev => [...prev, newMessage]);
+
+      // Mock auto-reply
+      setTimeout(() => {
+        const reply: ChatMessage = {
+          id: `m${Date.now() + 1}`,
+          chatId,
+          senderId: otherUser?.id || '',
+          text: `I'll get back to you shortly regarding the ${job?.title || 'job'}.`,
+          timestamp: 'Just now',
+          isRead: false,
+        };
+        setMessages(prev => [...prev, reply]);
+      }, 2000);
+      return;
+    }
+
+    // Real Supabase insert
+    try {
+      const { error: insertError } = await client
+        .from('messages')
+        .insert({
+          chat_id: chatId,
+          sender_id: user.id,
+          text: textToSend,
+          is_read: false
+        });
+
+      if (insertError) throw insertError;
+
+      // Update chats metadata row
+      await client
+        .from('chats')
+        .update({
+          last_message: textToSend,
+          last_timestamp: new Date().toISOString()
+        })
+        .eq('id', chatId);
+
+      // Force immediate poll refresh to show sent message
+      const { data } = await client
+        .from('messages')
+        .select('*')
+        .eq('chat_id', chatId)
+        .order('created_at', { ascending: true });
+
+      if (data) {
+        setMessages(data.map(m => ({
+          id: m.id,
+          chatId: m.chat_id,
+          senderId: m.sender_id,
+          text: m.text,
+          timestamp: formatTime(m.created_at),
+          isRead: m.is_read
+        })));
+      }
+    } catch (err: any) {
+      console.error('[ChatDetail] Send failed:', err.message);
+    }
   };
 
   return (
@@ -126,7 +281,7 @@ export default function ChatDetailScreen({ chatId, navigate }: Props) {
             }}>
               {!isMe && (
                 <div style={{ width: 28, height: 28, borderRadius: 'var(--radius-full)', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, opacity: showAvatar ? 1 : 0 }}>
-                  {otherUser?.name.charAt(0)}
+                  {otherUser?.name.charAt(0) || 'E'}
                 </div>
               )}
               
@@ -177,3 +332,4 @@ export default function ChatDetailScreen({ chatId, navigate }: Props) {
     </div>
   );
 }
+

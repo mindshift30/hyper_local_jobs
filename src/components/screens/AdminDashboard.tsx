@@ -15,7 +15,16 @@ import {
   Filter
 } from 'lucide-react';
 import { DEMO_JOBS } from '@/lib/demo-data';
-import AdminJobMap from '@/components/maps/AdminJobMap';
+import dynamic from 'next/dynamic';
+
+const AdminJobMap = dynamic(() => import('@/components/maps/AdminJobMap'), {
+  ssr: false,
+  loading: () => (
+    <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)' }}>
+      <span className="btn-spinner" style={{ width: 35, height: 35, borderTopColor: 'var(--primary)' }} />
+    </div>
+  )
+});
 import { 
   BarChart, 
   Bar, 
