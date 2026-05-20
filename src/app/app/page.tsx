@@ -28,8 +28,6 @@ import {
   PlusCircle,
   Users,
   Star,
-  Smartphone,
-  Monitor,
   Sun,
   Moon,
   Globe
@@ -81,8 +79,13 @@ export default function AppPage() {
     setMounted(true);
     useAuthStore.getState().checkSession();
     if (typeof window !== 'undefined') {
-      const isMobile = window.innerWidth <= 768;
-      useUIStore.getState().setLayoutMode(isMobile ? 'mobile' : 'desktop');
+      const handleResize = () => {
+        const isMobile = window.innerWidth <= 768;
+        useUIStore.getState().setLayoutMode(isMobile ? 'mobile' : 'desktop');
+      };
+      handleResize();
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
     }
   }, []);
 
@@ -323,25 +326,6 @@ function AppLayoutWrapper({
 
       {/* Floating Glassmorphic Control Dock */}
       <div className="floating-control-dock" aria-label="Layout controls">
-        <button
-          className={`floating-control-btn ${layoutMode === 'mobile' ? 'active' : ''}`}
-          onClick={() => useUIStore.getState().setLayoutMode('mobile')}
-          data-tooltip="Mobile Mode"
-          aria-label="Switch to mobile simulator mode"
-        >
-          <Smartphone size={18} />
-        </button>
-        <button
-          className={`floating-control-btn ${layoutMode === 'desktop' ? 'active' : ''}`}
-          onClick={() => useUIStore.getState().setLayoutMode('desktop')}
-          data-tooltip="Desktop Mode"
-          aria-label="Switch to widescreen desktop mode"
-        >
-          <Monitor size={18} />
-        </button>
-
-        <div className="floating-control-divider" />
-
         <button
           className="floating-control-btn"
           onClick={toggleTheme}

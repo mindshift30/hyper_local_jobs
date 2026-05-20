@@ -61,10 +61,16 @@ export default function JobDetailScreen({ jobId, navigate }: Props) {
             style={{ color: 'white', background: 'rgba(255,255,255,0.15)' }} aria-label="Go back">
             <ArrowLeft size={20} />
           </button>
-          <button className="btn btn-icon" onClick={() => toggleSaved(job.id)}
-            style={{ color: 'white', background: 'rgba(255,255,255,0.15)' }} aria-label="Save job">
-            <Heart size={20} fill={isSaved ? 'white' : 'none'} />
-          </button>
+          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+            <button className="btn btn-icon" onClick={handleShareLocation}
+              style={{ color: 'white', background: 'rgba(255,255,255,0.15)' }} aria-label="Share location">
+              <Share2 size={20} />
+            </button>
+            <button className="btn btn-icon" onClick={() => toggleSaved(job.id)}
+              style={{ color: 'white', background: 'rgba(255,255,255,0.15)' }} aria-label="Save job">
+              <Heart size={20} fill={isSaved ? 'white' : 'none'} />
+            </button>
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', marginBottom: 'var(--space-2)', flexWrap: 'wrap' }}>
