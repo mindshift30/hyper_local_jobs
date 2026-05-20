@@ -147,21 +147,29 @@ function PostJobWizard({ navigate }: { navigate: (s: Screen) => void }) {
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [form, setForm] = useState({
-    title: '', category: '', people: 1, pay: '', payType: 'daily' as 'daily' | 'weekly' | 'monthly',
+    title: '', category: '', customCategory: '', people: 1, pay: '', payType: 'daily' as 'daily' | 'weekly' | 'monthly',
     shift: 'morning', duration: '1 day', area: 'T.Nagar', description: '', sameDayPay: true,
     latitude: 13.0418, longitude: 80.2341, // Default T.Nagar coords
   });
 
-  const handleAreaChange = async (area: string) => {
-    // 1. Try hardcoded coords first (instant)
-    const knownCoords = CHENNAI_AREA_COORDS[area];
-    if (knownCoords) {
-      setForm(f => ({ ...f, area, latitude: knownCoords.lat, longitude: knownCoords.lng }));
+  const handleAreaBlur = async (areaText: string) => {
+    if (!areaText.trim()) return;
+    const cleanArea = areaText.trim();
+    // 1. Try hardcoded coords first (case insensitive match)
+    const matchKey = Object.keys(CHENNAI_AREA_COORDS).find(k => k.toLowerCase() === cleanArea.toLowerCase());
+    if (matchKey) {
+      const coords = CHENNAI_AREA_COORDS[matchKey];
+      setForm(f => ({ ...f, area: matchKey, latitude: coords.lat, longitude: coords.lng }));
     } else {
       // 2. Fallback to API geocoding
-      setForm(f => ({ ...f, area })); // Set area immediately for UI response
-      const coords = await geocodeArea(area);
-      setForm(f => ({ ...f, latitude: coords.latitude, longitude: coords.longitude }));
+      try {
+        const coords = await geocodeArea(cleanArea);
+        setForm(f => ({ ...f, area: cleanArea, latitude: coords.latitude, longitude: coords.longitude }));
+      } catch (err) {
+        console.error('Error geocoding custom area:', err);
+        // Keep the custom area text, but keep the default lat/lng
+        setForm(f => ({ ...f, area: cleanArea }));
+      }
     }
   };
 
@@ -172,17 +180,25 @@ function PostJobWizard({ navigate }: { navigate: (s: Screen) => void }) {
     }
     setIsSubmitting(true);
     try {
+      const selectedCategory = form.category === 'others' ? (form.customCategory || 'Others') : (form.category || 'events');
+      const categoryIcon = selectedCategory.toLowerCase().includes('delivery') ? '🛵' : 
+                           selectedCategory.toLowerCase().includes('retail') ? '🏪' : 
+                           selectedCategory.toLowerCase().includes('kitchen') ? '🍳' : 
+                           form.category === 'others' ? '➕' : '🏢';
       await createJob({
         title: form.title || 'Untitled Job',
         company: user.name || 'Kavitha Catering',
-        companyLogo: form.category === 'delivery' ? '🛵' : form.category === 'retail' ? '🏪' : form.category === 'kitchen' ? '🍳' : '🏢',
-        category: form.category || 'events',
+        companyLogo: categoryIcon,
+        category: selectedCategory,
         area: form.area,
         distance: 1.0,
         pay: Number(form.pay) || 600,
         payType: form.payType,
         shift: form.shift,
-        shiftTime: form.shift === 'morning' ? '7 AM – 3 PM' : form.shift === 'evening' ? '2 PM – 8 PM' : form.shift === 'night' ? '8 PM – 4 AM' : '9 AM – 5 PM',
+        shiftTime: form.shift === 'morning' ? '7 AM – 3 PM' : 
+                   form.shift === 'evening' ? '2 PM – 8 PM' : 
+                   form.shift === 'night' ? '8 PM – 4 AM' : 
+                   form.shift === 'one-day' ? 'Single Day Shift' : '9 AM – 5 PM',
         description: form.description || 'General helper duties.',
         requirements: ['Punctual', 'Honest work ethic'],
         whatToBring: ['Aadhaar card copy'],
@@ -233,15 +249,29 @@ function PostJobWizard({ navigate }: { navigate: (s: Screen) => void }) {
             <div style={{ marginBottom: 'var(--space-4)' }}>
               <label className="input-label" style={{ marginBottom: 'var(--space-2)', display: 'block' }}>Category</label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--space-2)' }}>
-                {JOB_CATEGORIES.slice(0, 8).map(c => (
+                {[...JOB_CATEGORIES.slice(0, 7), { id: 'others', name: 'Others', icon: '➕', color: '#10B981' }].map(c => (
                   <button key={c.id} className={`category-item ${form.category === c.id ? '' : ''}`}
                     onClick={() => setForm({ ...form, category: c.id })}
-                    style={form.category === c.id ? { borderColor: 'var(--primary)', background: 'var(--primary-50)' } : {}}>
+                    style={form.category === c.id ? { borderColor: 'var(--primary)', background: 'var(--primary-50)' } : {}}
+                    id={`post-cat-${c.id}`}
+                  >
                     <span style={{ fontSize: 20 }}>{c.icon}</span>
                     <span className="category-name">{c.name}</span>
                   </button>
                 ))}
               </div>
+              {form.category === 'others' && (
+                <div className="input-group animate-fade-in-up" style={{ marginTop: 'var(--space-3)' }}>
+                  <label className="input-label">Custom Category Name</label>
+                  <input
+                    className="input-field"
+                    placeholder="e.g. Catering, Gardening, Painting"
+                    value={form.customCategory}
+                    onChange={e => setForm({ ...form, customCategory: e.target.value })}
+                    id="post-custom-category"
+                  />
+                </div>
+              )}
             </div>
             <div className="input-group" style={{ marginBottom: 'var(--space-4)' }}>
               <label className="input-label">Number of people needed</label>
@@ -272,10 +302,16 @@ function PostJobWizard({ navigate }: { navigate: (s: Screen) => void }) {
             </div>
             <div style={{ marginBottom: 'var(--space-4)' }}>
               <label className="input-label" style={{ marginBottom: 'var(--space-2)', display: 'block' }}>Shift</label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)' }}>
-                {[{ id: 'morning', icon: '🌅', label: 'Morning' }, { id: 'evening', icon: '🌆', label: 'Evening' }, { id: 'night', icon: '🌙', label: 'Night' }, { id: 'weekend', icon: '📅', label: 'Weekend' }].map(sh => (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(95px, 1fr))', gap: 'var(--space-2)' }}>
+                {[
+                  { id: 'morning', icon: '🌅', label: 'Morning' },
+                  { id: 'evening', icon: '🌆', label: 'Evening' },
+                  { id: 'night', icon: '🌙', label: 'Night' },
+                  { id: 'weekend', icon: '📅', label: 'Weekend' },
+                  { id: 'one-day', icon: '⏱️', label: 'One Day' }
+                ].map(sh => (
                   <button key={sh.id} className={`chip ${form.shift === sh.id ? 'active' : ''}`}
-                    onClick={() => setForm({ ...form, shift: sh.id })} style={{ justifyContent: 'center', padding: 'var(--space-3)' }}>
+                    onClick={() => setForm({ ...form, shift: sh.id })} style={{ justifyContent: 'center', padding: 'var(--space-3)', width: '100%' }}>
                     {sh.icon} {sh.label}
                   </button>
                 ))}
@@ -296,12 +332,18 @@ function PostJobWizard({ navigate }: { navigate: (s: Screen) => void }) {
           <div className="animate-fade-in-up">
             <h2 style={{ fontSize: 'var(--text-base)', fontWeight: 700, marginBottom: 'var(--space-4)', color: 'var(--text-primary)' }}>{t('employer.step3')}</h2>
             <div className="input-group" style={{ marginBottom: 'var(--space-4)' }}>
-              <label className="input-label">Area</label>
-              <select className="input-field" value={form.area} onChange={e => handleAreaChange(e.target.value)}>
-                {Object.keys(CHENNAI_AREA_COORDS).map(a => (
-                  <option key={a} value={a}>{a}</option>
-                ))}
-              </select>
+              <label className="input-label">Area / Location</label>
+              <input
+                className="input-field"
+                placeholder="e.g. Anna Nagar, Madipakkam, Adyar"
+                value={form.area}
+                onChange={e => setForm({ ...form, area: e.target.value })}
+                onBlur={e => handleAreaBlur(e.target.value)}
+                id="post-job-area-input"
+              />
+              <span className="input-hint" style={{ color: 'var(--text-tertiary)', marginTop: 4, display: 'block', fontSize: 'var(--text-xxs)' }}>
+                💡 Type any area or street. We will find it on the map!
+              </span>
             </div>
             <div className="input-group" style={{ marginBottom: 'var(--space-4)' }}>
               <label className="input-label">Job Description (optional)</label>
@@ -309,7 +351,15 @@ function PostJobWizard({ navigate }: { navigate: (s: Screen) => void }) {
             </div>
             <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
               <button className="btn btn-secondary btn-lg" style={{ flex: 1 }} onClick={() => setStep(2)}>{t('common.back')}</button>
-              <button className="btn btn-primary btn-lg" style={{ flex: 2 }} onClick={() => setStep(4)}>{t('common.next')}</button>
+              <button className="btn btn-primary btn-lg" style={{ flex: 2 }} onClick={async () => {
+                setIsSubmitting(true);
+                try {
+                  await handleAreaBlur(form.area);
+                } finally {
+                  setIsSubmitting(false);
+                  setStep(4);
+                }
+              }} disabled={isSubmitting}>{t('common.next')}</button>
             </div>
           </div>
         )}
@@ -326,18 +376,28 @@ function PostJobWizard({ navigate }: { navigate: (s: Screen) => void }) {
                 <span>⏰ {form.shift}</span>
               </div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
-              {[{ label: 'Basic — ₹99', desc: 'Standard listing for 7 days' }, { label: 'Featured — ₹199', desc: 'Highlighted + top results for 7 days', popular: true }, { label: 'Premium — ₹299', desc: 'Featured + push notification to seekers' }].map((plan, i) => (
-                <div key={plan.label} className="card" style={{ cursor: 'pointer', border: i === 1 ? '2px solid var(--primary)' : undefined, position: 'relative' }}>
-                  {plan.popular && <span className="badge badge-primary" style={{ position: 'absolute', top: -8, right: 12, fontSize: 10 }}>Popular</span>}
-                  <p style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>{plan.label}</p>
-                  <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>{plan.desc}</p>
-                </div>
-              ))}
+            <div className="card" style={{
+              background: 'linear-gradient(135deg, rgba(34,197,94,0.1) 0%, rgba(34,197,94,0.02) 100%)',
+              border: '1px dashed var(--success)',
+              padding: 'var(--space-4)',
+              borderRadius: 'var(--radius-lg)',
+              marginBottom: 'var(--space-4)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 'var(--space-2)'
+            }}>
+              <p style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--success-dark)', display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
+                🎉 QuickGig is 100% Free!
+              </p>
+              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+                We support Chennai's local businesses. Your job will be broadcasted instantly to matching job seekers in <strong>{form.area}</strong> for free.
+              </p>
             </div>
             <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
               <button className="btn btn-secondary btn-lg" style={{ flex: 1 }} onClick={() => setStep(3)}>{t('common.back')}</button>
-              <button className="btn btn-primary btn-lg" style={{ flex: 2 }} onClick={handlePost}>Post Job — ₹199</button>
+              <button className="btn btn-primary btn-lg" style={{ flex: 2 }} onClick={handlePost} disabled={isSubmitting}>
+                {isSubmitting ? 'Posting...' : 'Post Job (Free)'}
+              </button>
             </div>
           </div>
         )}

@@ -5,6 +5,7 @@ import { useI18n } from '@/components/providers/I18nProvider';
 import { DEMO_JOBS, formatPay } from '@/lib/demo-data';
 import { ArrowLeft, Heart, MapPin, Clock, BadgeCheck, Star, Zap, Share2, MessageCircle, Users } from 'lucide-react';
 import { useJobsStore } from '@/stores/jobs-store';
+import { useUIStore } from '@/stores/ui-store';
 import dynamic from 'next/dynamic';
 
 const JobLocationMap = dynamic(() => import('@/components/maps/JobLocationMap'), {
@@ -25,9 +26,27 @@ interface Props {
 export default function JobDetailScreen({ jobId, navigate }: Props) {
   const { t } = useI18n();
   const { savedJobs, toggleSaved } = useJobsStore();
+  const { showToast } = useUIStore();
   const job = DEMO_JOBS.find(j => j.id === jobId) || DEMO_JOBS[0];
   const isSaved = savedJobs.includes(job.id);
   const moreJobs = DEMO_JOBS.filter(j => j.employerId === job.employerId && j.id !== job.id);
+
+  const handleShareLocation = () => {
+    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${job.lat},${job.lng}`;
+    if (navigator.share) {
+      navigator.share({
+        title: `${job.title} - Job Location`,
+        text: `Here is the work location for "${job.title}" at ${job.area}:`,
+        url: mapsUrl,
+      }).catch(() => {
+        navigator.clipboard.writeText(mapsUrl);
+        showToast('Location link copied!', 'success');
+      });
+    } else {
+      navigator.clipboard.writeText(mapsUrl);
+      showToast('Location link copied!', 'success');
+    }
+  };
 
   return (
     <div className="page-enter" style={{ paddingBottom: 100 }}>
@@ -116,9 +135,19 @@ export default function JobDetailScreen({ jobId, navigate }: Props) {
 
         {/* Map Location */}
         <div style={{ marginBottom: 'var(--space-6)' }}>
-          <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, marginBottom: 'var(--space-3)', color: 'var(--text-primary)' }}>
-            Job Location
-          </h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-3)' }}>
+            <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+              Job Location
+            </h2>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={handleShareLocation}
+              style={{ gap: 'var(--space-1)', display: 'inline-flex', alignItems: 'center', height: 32, padding: '0 var(--space-3)' }}
+              id="share-location-btn"
+            >
+              <Share2 size={14} /> Share Location
+            </button>
+          </div>
           <JobLocationMap lat={job.lat} lng={job.lng} title={job.title} area={job.area} />
         </div>
 

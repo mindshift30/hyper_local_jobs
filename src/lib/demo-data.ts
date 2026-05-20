@@ -99,6 +99,7 @@ export const JOB_CATEGORIES = [
   { id: 'driving', name: 'Driving', icon: '🚗', color: '#F97316' },
   { id: 'teaching', name: 'Tutoring', icon: '📚', color: '#6366F1' },
   { id: 'construction', name: 'Construction', icon: '🏗️', color: '#A855F7' },
+  { id: 'others', name: 'Others', icon: '➕', color: '#10B981' },
 ] as const;
 
 export const SHIFTS = [
@@ -106,6 +107,7 @@ export const SHIFTS = [
   { id: 'evening', name: 'Evening', icon: '🌆', time: '12 PM – 6 PM' },
   { id: 'night', name: 'Night', icon: '🌙', time: '6 PM – 12 AM' },
   { id: 'weekend', name: 'Weekend', icon: '📅', time: 'Sat & Sun' },
+  { id: 'one-day', name: 'One Day', icon: '⏱️', time: 'Single Day Shift' },
 ] as const;
 
 export const DEMO_JOBS: Job[] = [

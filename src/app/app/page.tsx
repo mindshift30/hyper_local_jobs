@@ -80,6 +80,10 @@ export default function AppPage() {
   useEffect(() => {
     setMounted(true);
     useAuthStore.getState().checkSession();
+    if (typeof window !== 'undefined') {
+      const isMobile = window.innerWidth <= 768;
+      useUIStore.getState().setLayoutMode(isMobile ? 'mobile' : 'desktop');
+    }
   }, []);
 
   const navigate = (s: Screen, jobId?: string) => {
