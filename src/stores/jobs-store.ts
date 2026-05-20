@@ -4,6 +4,21 @@ import { create } from 'zustand';
 import { supabase, isSupabaseEnabled, seedDatabaseIfEmpty } from '@/services/supabase';
 import { Job, Application, DEMO_JOBS, DEMO_APPLICATIONS } from '@/lib/demo-data';
 
+export interface EmployerApplication {
+  id: string;
+  jobId: string;
+  jobTitle?: string;
+  userId: string;
+  name: string;
+  phone: string;
+  area: string;
+  trustScore: number;
+  isVerified: boolean;
+  status: 'applied' | 'viewed' | 'shortlisted' | 'hired' | 'rejected';
+  appliedAt: string;
+  experience: string;
+}
+
 interface JobFilters {
   search: string;
   areas: string[];
@@ -21,6 +36,7 @@ interface JobFilters {
 interface JobsState {
   jobs: Job[];
   applications: Application[];
+  employerApplications: EmployerApplication[];
   loading: boolean;
   filters: JobFilters;
   savedJobs: string[];
@@ -35,6 +51,8 @@ interface JobsState {
   // Real Database Actions
   fetchJobs: () => Promise<void>;
   fetchApplications: (userId: string) => Promise<void>;
+  fetchEmployerApplications: (employerId: string) => Promise<void>;
+  updateApplicationStatus: (applicationId: string, status: 'applied' | 'viewed' | 'shortlisted' | 'hired' | 'rejected') => Promise<void>;
   applyToJob: (jobId: string, userId: string, note?: string) => Promise<void>;
   createJob: (newJob: Omit<Job, 'id' | 'postedAt' | 'employerId'>, employerId: string) => Promise<void>;
 }
@@ -106,9 +124,18 @@ const mapDbAppToApp = (dbApp: any): Application => ({
   appliedAt: dbApp.applied_at ? formatTimeAgo(dbApp.applied_at) : 'Just now',
 });
 
+const MOCK_EMPLOYER_APPLICANTS: EmployerApplication[] = [
+  { id: 'app_1', jobId: 'j3', jobTitle: 'Event Setup — Wedding Reception', userId: 'u1', name: 'Jagan K.', phone: '+91 98765 43210', area: 'Purasaiwakkam', trustScore: 4.2, isVerified: true, status: 'shortlisted', appliedAt: '2h ago', experience: 'College student, event setup experience' },
+  { id: 'app_2', jobId: 'j3', jobTitle: 'Event Setup — Wedding Reception', userId: 'u2', name: 'Murugan S.', phone: '+91 98765 11111', area: 'Ambattur', trustScore: 3.8, isVerified: true, status: 'applied', appliedAt: '5h ago', experience: '5 years construction, catering helper' },
+  { id: 'app_3', jobId: 'j3', jobTitle: 'Event Setup — Wedding Reception', userId: 'u3', name: 'Priya R.', phone: '+91 98765 22222', area: 'T.Nagar', trustScore: 4.5, isVerified: true, status: 'hired', appliedAt: '1d ago', experience: 'Hospitality diploma, 2 years hotel' },
+  { id: 'app_4', jobId: 'j3', jobTitle: 'Event Setup — Wedding Reception', userId: 'u4', name: 'Ramesh V.', phone: '+91 98765 33333', area: 'Velachery', trustScore: 3.5, isVerified: false, status: 'applied', appliedAt: '2d ago', experience: 'General helper, reliable' },
+  { id: 'app_5', jobId: 'j3', jobTitle: 'Event Setup — Wedding Reception', userId: 'u5', name: 'Lakshmi D.', phone: '+91 98765 44444', area: 'Anna Nagar', trustScore: 4.0, isVerified: true, status: 'applied', appliedAt: '3d ago', experience: 'Cooking experience, worked in canteen' },
+];
+
 export const useJobsStore = create<JobsState>((set, get) => ({
   jobs: [],
   applications: [],
+  employerApplications: [],
   loading: false,
   filters: { ...defaultFilters },
   savedJobs: ['j3', 'j8'],
@@ -281,6 +308,93 @@ export const useJobsStore = create<JobsState>((set, get) => ({
     } catch (err: any) {
       console.error('[JobsStore] Failed to post job to Supabase:', err.message);
       throw err;
+    }
+  },
+
+  fetchEmployerApplications: async (employerId: string) => {
+    const client = supabase;
+    if (!isSupabaseEnabled() || !client) {
+      console.log('[JobsStore] Supabase not active. Using mock employer applications.');
+      set({ employerApplications: MOCK_EMPLOYER_APPLICANTS });
+      return;
+    }
+
+    try {
+      // Query applications where jobs.employer_id == employerId
+      const { data, error } = await client
+        .from('applications')
+        .select(`
+          id,
+          job_id,
+          user_id,
+          status,
+          note,
+          applied_at,
+          jobs!inner (
+            id,
+            title,
+            employer_id
+          ),
+          profiles:user_id (
+            id,
+            name,
+            phone,
+            area,
+            trust_score,
+            is_verified
+          )
+        `)
+        .eq('jobs.employer_id', employerId);
+
+      if (error) throw error;
+
+      if (data) {
+        const mapped: EmployerApplication[] = (data as any[]).map((row: any) => ({
+          id: row.id,
+          jobId: row.job_id,
+          jobTitle: row.jobs?.title || 'Unknown Job',
+          userId: row.user_id,
+          name: row.profiles?.name || 'Anonymous Seeker',
+          phone: row.profiles?.phone || '',
+          area: row.profiles?.area || 'Chennai',
+          trustScore: Number(row.profiles?.trust_score || 4.0),
+          isVerified: row.profiles?.is_verified || false,
+          status: row.status,
+          appliedAt: row.applied_at ? formatTimeAgo(row.applied_at) : 'Just now',
+          experience: row.note || '',
+        }));
+        set({ employerApplications: mapped });
+      }
+    } catch (err: any) {
+      console.warn('[JobsStore] Failed to fetch employer applications:', err.message);
+      set({ employerApplications: MOCK_EMPLOYER_APPLICANTS });
+    }
+  },
+
+  updateApplicationStatus: async (applicationId: string, status: 'applied' | 'viewed' | 'shortlisted' | 'hired' | 'rejected') => {
+    const client = supabase;
+    
+    // Update local state first to be instant and responsive
+    set((state) => ({
+      employerApplications: state.employerApplications.map((app) =>
+        app.id === applicationId ? { ...app, status } : app
+      ),
+    }));
+
+    if (!isSupabaseEnabled() || !client) {
+      console.log('[JobsStore] Offline: updated status in memory.');
+      return;
+    }
+
+    try {
+      const { error } = await client
+        .from('applications')
+        .update({ status })
+        .eq('id', applicationId);
+
+      if (error) throw error;
+    } catch (err: any) {
+      console.error('[JobsStore] Failed to update application status:', err.message);
     }
   },
 }));

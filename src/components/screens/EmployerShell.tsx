@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useI18n } from '@/components/providers/I18nProvider';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
-import { DEMO_JOBS, DEMO_EMPLOYER_APPLICANTS, formatPay, JOB_CATEGORIES } from '@/lib/demo-data';
+import { useJobsStore } from '@/stores/jobs-store';
+import { DEMO_JOBS, formatPay, JOB_CATEGORIES } from '@/lib/demo-data';
 import { LayoutDashboard, PlusCircle, Users, User, Eye, Briefcase, UserCheck, Plus, Check, X, MessageCircle, ChevronRight, Star, Phone } from 'lucide-react';
 import { geocodeArea } from '@/services/geocoding';
 import { CHENNAI_AREA_COORDS } from '@/lib/constants/chennai-areas';
@@ -55,7 +56,22 @@ export default function EmployerShell({ screen, navigate }: Props) {
 function EmployerDashboard({ navigate }: { navigate: (s: Screen) => void }) {
   const { t } = useI18n();
   const { user } = useAuthStore();
-  const myJobs = DEMO_JOBS.slice(0, 3);
+  const { jobs, fetchJobs, employerApplications, fetchEmployerApplications } = useJobsStore();
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchJobs();
+      fetchEmployerApplications(user.id);
+    }
+  }, [user?.id, fetchJobs, fetchEmployerApplications]);
+
+  const myJobs = jobs.filter(j => j.employerId === user?.id);
+  const myApplicants = employerApplications;
+  
+  // Calculate dynamic stats
+  const activeJobsCount = myJobs.length;
+  const totalApplicantsCount = myApplicants.length;
+  const hiredCount = myApplicants.filter(a => a.status === 'hired').length;
 
   return (
     <div className="page-enter" style={{ paddingBottom: 'calc(var(--bottom-nav-height) + var(--space-4))' }}>
@@ -68,10 +84,10 @@ function EmployerDashboard({ navigate }: { navigate: (s: Screen) => void }) {
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)', marginBottom: 'var(--space-6)' }}>
           {[
-            { label: t('employer.activeJobs'), value: '3', icon: <Briefcase size={18} />, color: 'var(--primary)' },
-            { label: t('employer.applicants'), value: '18', icon: <Users size={18} />, color: 'var(--secondary)' },
-            { label: t('employer.views'), value: '142', icon: <Eye size={18} />, color: 'var(--warning)' },
-            { label: t('employer.hiredWeek'), value: '5', icon: <UserCheck size={18} />, color: 'var(--success)' },
+            { label: t('employer.activeJobs'), value: String(activeJobsCount), icon: <Briefcase size={18} />, color: 'var(--primary)' },
+            { label: t('employer.applicants'), value: String(totalApplicantsCount), icon: <Users size={18} />, color: 'var(--secondary)' },
+            { label: t('employer.views'), value: String(activeJobsCount * 12 + totalApplicantsCount * 2), icon: <Eye size={18} />, color: 'var(--warning)' },
+            { label: t('employer.hiredWeek'), value: String(hiredCount), icon: <UserCheck size={18} />, color: 'var(--success)' },
           ].map(stat => (
             <div key={stat.label} className="stats-card">
               <div style={{ color: stat.color, marginBottom: 'var(--space-1)' }}>{stat.icon}</div>
@@ -91,22 +107,32 @@ function EmployerDashboard({ navigate }: { navigate: (s: Screen) => void }) {
         <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, marginBottom: 'var(--space-3)', color: 'var(--text-primary)' }}>
           {t('employer.activeJobs')}
         </h2>
-        {myJobs.map(job => (
-          <div key={job.id} className="card" style={{ marginBottom: 'var(--space-3)', cursor: 'pointer' }}
-            onClick={() => navigate('employer-applicants')}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <p style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>{job.title}</p>
-                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>{job.area} · {formatPay(job.pay, job.payType)}</p>
-              </div>
-              <span className="badge badge-primary">5 applicants</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'var(--space-2)' }}>
-              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>Posted {job.postedAt}</span>
-              <ChevronRight size={14} color="var(--text-tertiary)" />
-            </div>
+        {myJobs.length === 0 ? (
+          <div className="card" style={{ padding: 'var(--space-6)', textAlign: 'center', color: 'var(--text-secondary)' }}>
+            <Briefcase size={32} style={{ margin: '0 auto var(--space-2)', opacity: 0.5 }} />
+            <p style={{ fontSize: 'var(--text-sm)' }}>No active job listings yet. Click above to post your first job!</p>
           </div>
-        ))}
+        ) : (
+          myJobs.map(job => {
+            const jobApps = myApplicants.filter(a => a.jobId === job.id);
+            return (
+              <div key={job.id} className="card" style={{ marginBottom: 'var(--space-3)', cursor: 'pointer' }}
+                onClick={() => navigate('employer-applicants')}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <p style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>{job.title}</p>
+                    <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>{job.area} · {formatPay(job.pay, job.payType)}</p>
+                  </div>
+                  <span className="badge badge-primary">{jobApps.length} {jobApps.length === 1 ? 'applicant' : 'applicants'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'var(--space-2)' }}>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>Posted {job.postedAt}</span>
+                  <ChevronRight size={14} color="var(--text-tertiary)" />
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );
@@ -116,7 +142,10 @@ function EmployerDashboard({ navigate }: { navigate: (s: Screen) => void }) {
 function PostJobWizard({ navigate }: { navigate: (s: Screen) => void }) {
   const { t } = useI18n();
   const { showToast } = useUIStore();
+  const { user } = useAuthStore();
+  const { createJob } = useJobsStore();
   const [step, setStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [form, setForm] = useState({
     title: '', category: '', people: 1, pay: '', payType: 'daily' as 'daily' | 'weekly' | 'monthly',
     shift: 'morning', duration: '1 day', area: 'T.Nagar', description: '', sameDayPay: true,
@@ -136,9 +165,45 @@ function PostJobWizard({ navigate }: { navigate: (s: Screen) => void }) {
     }
   };
 
-  const handlePost = () => {
-    showToast(t('employer.postSuccess'), 'success');
-    setStep(5);
+  const handlePost = async () => {
+    if (!user?.id) {
+      showToast('You must be logged in to post a job', 'error');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await createJob({
+        title: form.title || 'Untitled Job',
+        company: user.name || 'Kavitha Catering',
+        companyLogo: form.category === 'delivery' ? '🛵' : form.category === 'retail' ? '🏪' : form.category === 'kitchen' ? '🍳' : '🏢',
+        category: form.category || 'events',
+        area: form.area,
+        distance: 1.0,
+        pay: Number(form.pay) || 600,
+        payType: form.payType,
+        shift: form.shift,
+        shiftTime: form.shift === 'morning' ? '7 AM – 3 PM' : form.shift === 'evening' ? '2 PM – 8 PM' : form.shift === 'night' ? '8 PM – 4 AM' : '9 AM – 5 PM',
+        description: form.description || 'General helper duties.',
+        requirements: ['Punctual', 'Honest work ethic'],
+        whatToBring: ['Aadhaar card copy'],
+        slots: form.people,
+        slotsTotal: form.people,
+        isUrgent: false,
+        isVerified: false,
+        isSameDay: form.sameDayPay,
+        rating: 5.0,
+        reviewCount: 0,
+        lat: form.latitude,
+        lng: form.longitude,
+      }, user.id);
+      
+      showToast(t('employer.postSuccess'), 'success');
+      setStep(5);
+    } catch (err: any) {
+      showToast('Failed to post job: ' + err.message, 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -296,60 +361,86 @@ function PostJobWizard({ navigate }: { navigate: (s: Screen) => void }) {
 function ApplicantsManager({ navigate }: { navigate: (s: Screen) => void }) {
   const { t } = useI18n();
   const { showToast } = useUIStore();
-  const [applicants, setApplicants] = useState(DEMO_EMPLOYER_APPLICANTS);
+  const { user } = useAuthStore();
+  const { employerApplications, updateApplicationStatus, fetchEmployerApplications } = useJobsStore();
 
-  const updateStatus = (id: string, status: string) => {
-    setApplicants(prev => prev.map(a => a.id === id ? { ...a, status: status as typeof a.status } : a));
-    showToast(`Applicant ${status}!`, 'success');
+  useEffect(() => {
+    if (user?.id) {
+      fetchEmployerApplications(user.id);
+    }
+  }, [user?.id, fetchEmployerApplications]);
+
+  const updateStatus = async (id: string, status: 'applied' | 'viewed' | 'shortlisted' | 'hired' | 'rejected') => {
+    try {
+      await updateApplicationStatus(id, status);
+      showToast(`Applicant ${status}!`, 'success');
+    } catch (err: any) {
+      showToast(`Failed to update: ${err.message}`, 'error');
+    }
   };
 
   const statusColors: Record<string, string> = {
-    applied: 'var(--primary)', shortlisted: 'var(--warning)', hired: 'var(--success)',
+    applied: 'var(--primary)', shortlisted: 'var(--warning)', hired: 'var(--success)', rejected: 'var(--danger)', viewed: 'var(--text-tertiary)'
   };
 
   return (
     <div className="page-enter" style={{ paddingBottom: 'calc(var(--bottom-nav-height) + var(--space-4))' }}>
       <div style={{ padding: 'var(--space-4)' }}>
         <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 800, marginBottom: 'var(--space-2)', color: 'var(--text-primary)' }}>Applicants</h1>
-        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 'var(--space-4)' }}>Event Setup — Wedding Reception</p>
+        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 'var(--space-4)' }}>Manage seeker applications for your active jobs</p>
 
-        {applicants.map(a => (
-          <div key={a.id} className="card" style={{ marginBottom: 'var(--space-3)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
-              <div className="avatar avatar-md" style={{ background: `linear-gradient(135deg, ${statusColors[a.status] || 'var(--primary)'}, var(--secondary))` }}>
-                {a.name.charAt(0)}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <p style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>{a.name}</p>
-                  <span className="badge" style={{ background: `${statusColors[a.status]}20`, color: statusColors[a.status] }}>
-                    {a.status}
-                  </span>
-                </div>
-                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>{a.area} · ⭐ {a.trustScore}</p>
-                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginTop: 2 }}>{a.experience}</p>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-              {a.status === 'applied' && <>
-                <button className="btn btn-sm btn-primary" style={{ flex: 1 }} onClick={() => updateStatus(a.id, 'shortlisted')}>
-                  <Star size={14} /> {t('applicant.shortlist')}
-                </button>
-                <button className="btn btn-sm btn-danger" onClick={() => updateStatus(a.id, 'rejected')}>
-                  <X size={14} />
-                </button>
-              </>}
-              {a.status === 'shortlisted' && (
-                <button className="btn btn-sm btn-success" style={{ flex: 1 }} onClick={() => updateStatus(a.id, 'hired')}>
-                  <Check size={14} /> {t('applicant.hire')}
-                </button>
-              )}
-              <button className="btn btn-sm btn-success" style={{ gap: 'var(--space-1)' }}>
-                <Phone size={14} />
-              </button>
-            </div>
+        {employerApplications.length === 0 ? (
+          <div className="card" style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--text-secondary)' }}>
+            <Users size={36} style={{ margin: '0 auto var(--space-3)', opacity: 0.5 }} />
+            <p style={{ fontSize: 'var(--text-sm)' }}>No applications received yet. Your active listings are live on the seeker feed!</p>
           </div>
-        ))}
+        ) : (
+          employerApplications.map(a => (
+            <div key={a.id} className="card" style={{ marginBottom: 'var(--space-3)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
+                <div className="avatar avatar-md" style={{ background: `linear-gradient(135deg, ${statusColors[a.status] || 'var(--primary)'}, var(--secondary))` }}>
+                  {a.name.charAt(0)}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <p style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>{a.name}</p>
+                      <p style={{ fontSize: 'var(--text-xxs)', color: 'var(--primary)', fontWeight: 600 }}>{a.jobTitle}</p>
+                    </div>
+                    <span className="badge" style={{ background: `${statusColors[a.status]}20`, color: statusColors[a.status] }}>
+                      {a.status}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: 2 }}>{a.area} · ⭐ {a.trustScore}</p>
+                  <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginTop: 2, fontStyle: a.experience ? 'italic' : 'normal' }}>
+                    {a.experience || 'No application cover note provided.'}
+                  </p>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                {a.status === 'applied' && <>
+                  <button className="btn btn-sm btn-primary" style={{ flex: 1 }} onClick={() => updateStatus(a.id, 'shortlisted')}>
+                    <Star size={14} /> {t('applicant.shortlist')}
+                  </button>
+                  <button className="btn btn-sm btn-danger" onClick={() => updateStatus(a.id, 'rejected')}>
+                    <X size={14} />
+                  </button>
+                </>}
+                {a.status === 'shortlisted' && <>
+                  <button className="btn btn-sm btn-success" style={{ flex: 1 }} onClick={() => updateStatus(a.id, 'hired')}>
+                    <Check size={14} /> {t('applicant.hire')}
+                  </button>
+                  <button className="btn btn-sm btn-danger" onClick={() => updateStatus(a.id, 'rejected')}>
+                    <X size={14} />
+                  </button>
+                </>}
+                <a href={`tel:${a.phone}`} className="btn btn-sm btn-success" style={{ gap: 'var(--space-1)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Phone size={14} />
+                </a>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
