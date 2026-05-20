@@ -2,15 +2,18 @@
 
 import { create } from 'zustand';
 
-interface UIState {
+export interface UIState {
   theme: 'light' | 'dark';
   language: 'en' | 'ta';
+  layoutMode: 'mobile' | 'desktop';
   isFilterOpen: boolean;
   activeToast: { message: string; type: 'success' | 'error' | 'info' } | null;
   toggleTheme: () => void;
   setTheme: (theme: 'light' | 'dark') => void;
   toggleLanguage: () => void;
   setLanguage: (lang: 'en' | 'ta') => void;
+  toggleLayoutMode: () => void;
+  setLayoutMode: (mode: 'mobile' | 'desktop') => void;
   openFilter: () => void;
   closeFilter: () => void;
   showToast: (message: string, type: 'success' | 'error' | 'info') => void;
@@ -20,6 +23,7 @@ interface UIState {
 export const useUIStore = create<UIState>((set) => ({
   theme: 'light',
   language: 'en',
+  layoutMode: 'mobile',
   isFilterOpen: false,
   activeToast: null,
   toggleTheme: () =>
@@ -39,6 +43,9 @@ export const useUIStore = create<UIState>((set) => ({
   toggleLanguage: () =>
     set((state) => ({ language: state.language === 'en' ? 'ta' : 'en' })),
   setLanguage: (language) => set({ language }),
+  toggleLayoutMode: () =>
+    set((state) => ({ layoutMode: state.layoutMode === 'mobile' ? 'desktop' : 'mobile' })),
+  setLayoutMode: (layoutMode) => set({ layoutMode }),
   openFilter: () => set({ isFilterOpen: true }),
   closeFilter: () => set({ isFilterOpen: false }),
   showToast: (message, type) => {
