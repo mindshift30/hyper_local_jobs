@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useI18n } from '@/components/providers/I18nProvider';
-import { DEMO_APPLICATIONS, DEMO_JOBS, formatPay } from '@/lib/demo-data';
+import { useJobsStore } from '@/stores/jobs-store';
+import { useAuthStore } from '@/stores/auth-store';
+import { DEMO_JOBS, formatPay } from '@/lib/demo-data';
 import { Clock, CheckCircle, Eye, Star, XCircle, ArrowRight, TrendingUp } from 'lucide-react';
 import type { Screen } from '@/app/app/page';
 
@@ -21,8 +23,16 @@ const STATUS_CONFIG = {
 export default function ApplicationsScreen({ navigate }: Props) {
   const { t } = useI18n();
   const [filter, setFilter] = useState<'all' | 'active' | 'hired' | 'rejected'>('all');
+  const { user } = useAuthStore();
+  const { applications, fetchApplications, jobs } = useJobsStore();
 
-  const apps = DEMO_APPLICATIONS.filter(a => {
+  useEffect(() => {
+    if (user?.id) {
+      fetchApplications(user.id);
+    }
+  }, [user?.id, fetchApplications]);
+
+  const apps = applications.filter(a => {
     if (filter === 'all') return true;
     if (filter === 'active') return ['applied', 'viewed', 'shortlisted'].includes(a.status);
     return a.status === filter;
@@ -57,9 +67,9 @@ export default function ApplicationsScreen({ navigate }: Props) {
         {/* Application List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           {apps.map(app => {
-            const job = DEMO_JOBS.find(j => j.id === app.jobId);
+            const job = jobs.find(j => j.id === app.jobId) || DEMO_JOBS.find(j => j.id === app.jobId);
             if (!job) return null;
-            const status = STATUS_CONFIG[app.status];
+            const status = STATUS_CONFIG[app.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.applied;
 
             return (
               <div key={app.id} className="card" style={{ cursor: 'pointer' }}
